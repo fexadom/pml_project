@@ -1,0 +1,142 @@
+---
+title: "HAR Exercise - Weight Lifting"
+author: "Federico Domínguez"
+date: "4/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr,warn.conflicts=F, quietly=T)
+library(caret,warn.conflicts=F, quietly=T)
+```
+
+## Introduction
+
+The goal of the project is to predict the manner in which someone does exercise. This is the "classe" variable in the training set.
+
+## Loading the data
+
+The data was downloaded from:
+
+Training data:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+Test data:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+the data is loaded in R as follows:
+
+```{r, load data}
+
+training_set <- read.csv("pml-training.csv", header=TRUE, sep=",")
+
+test_set <- read.csv("pml-testing.csv", header=TRUE, sep=",")
+
+```
+
+## Exploring the data
+
+```{r, exploring data}
+dim(training_set)
+dim(test_set)
+summarise(group_by(training_set,user_name), n = n())
+summarise(group_by(training_set,classe), n = n())
+```
+
+The dataframes *training_set* and *test_set* both have 160 variables. The training set has 19622 observations and the test set has 20 observations. The *classe* variable has five different classes in the training set and are more or less equally distributed.
+
+## Selecting predictors
+
+Of all 160 variables in the training set, the 160th is the outcome class and the rest are either raw or processed data from the four sensors together with user and timestamps tags. Most of the processed data columns are incomplete therefore I will only use the raw data as predictors:
+
+```{r, selecting predictors}
+# indices vector to select raw data only
+subset_ind <- c(
+  #euler angles belt
+  8,9,10,
+  #gyros belt
+  37,38,39,
+  #accel belt
+  40,41,42,
+  #magnet belt
+  43,44,45,
+  
+  #euler angles arm
+  46,47,48,
+  #gyros arm
+  60,61,62,
+  #accel arm
+  63,64,65,
+  #magnet arm
+  66,67,68,
+  
+  #euler angles dumbbell
+  84,85,86,
+  #gyros dumbbell
+  113,114,115,
+  #accel dumbbell
+  116,117,118,
+  #magnet dumbbell
+  119,120,121,
+  
+  #euler angles forearm
+  122,123,124,
+  #gyros forearm
+  151,152,153,
+  #accel forearm
+  154,155,156,
+  #magnet forearm
+  157,158,159,
+  
+  # outcome classe
+  160
+)
+
+# select only the 48 columns for raw data from the 4 sensors
+training_set_sub <- select(training_set,subset_ind)
+test_set_sub <- select(test_set,subset_ind, -(160))
+```
+
+
+## Training
+
+Based on what is reported in:
+
+W. Ugulino, D. Cardador, K. Vega, E. Velloso, R. Milidiú, and H. Fuks, *“Wearable Computing: Accelerometers’ Data Classification of Body Postures and Movements,”* in Proceedings of 21st Brazilian Symposium on Artificial Intelligence, 2012, vol. 7589, pp. 52–61.
+
+I will use Random Forest with 10-fold cross validadtion to estimate the *mtry* parameter and the out of sample error.
+
+```{r, training}
+set.seed(1234)
+
+# 10 k-fold cross validadtion
+customizedControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
+
+# train with random forest, this takes a while
+model_rf <- train(classe ~ ., data = training_set_sub, method = "rf", trControl = customizedControl)
+
+model_rf
+```
+
+With mtry=2, the accuracy, and therefore the estimated out of sample error is 99.5%.
+
+## Prediction
+
+Now we can predict the 20 samples in the test set:
+
+```{r, prediction}
+
+# Obtained after doing the project Quiz
+ground_truth_test_set <- as.factor(c('B', 'A', 'B', 'A', 'A', 'E', 'D', 'B', 'A', 'A', 'B', 'C', 'B', 'A', 'E', 'E', 'A', 'B', 'B', 'B'))
+
+# Apply the model
+predictions <- predict(model_rf, newdata = test_set_sub)
+
+# Check confusion matrix
+confusionMatrix(data = predictions, reference = ground_truth_test_set)
+```
+
+All 20 samples were predicted correctly.
